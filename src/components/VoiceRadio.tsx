@@ -66,7 +66,7 @@ export default function VoiceRadio({ className = '' }: VoiceRadioProps) {
       
       // OpenAI Realtime WebSocket接続
       // client_secretを認証として使用
-      const wsUrl = `wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview&auth=${sessionData.clientSecret}`;
+      const wsUrl = `wss://api.openai.com/v1/realtime?model=gpt-realtime&auth=${sessionData.clientSecret}`;
       
       const ws = new WebSocket(wsUrl);
 

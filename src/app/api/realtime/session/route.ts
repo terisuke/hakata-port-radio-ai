@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         },
         session: {
           type: 'realtime',
-          model: 'gpt-4o-realtime-preview',
+          model: 'gpt-realtime',
           instructions: maritimeInstructions
         }
       })
@@ -101,7 +101,7 @@ export async function GET() {
   return NextResponse.json({
     status: 'available',
     service: 'OpenAI Realtime API',
-    model: 'gpt-4o-realtime-preview',
+    model: 'gpt-realtime',
     capabilities: ['audio_input', 'audio_output', 'function_calling'],
     timestamp: new Date().toISOString()
   });
