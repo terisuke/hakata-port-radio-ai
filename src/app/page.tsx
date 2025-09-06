@@ -1,103 +1,73 @@
-import Image from "next/image";
+import VoiceRadio from '@/components/VoiceRadio';
+import VoiceRadioOfficial from '@/components/VoiceRadioOfficial';
 
+/**
+ * 博多ポートラジオAIシステム - メインページ
+ * Next.js 15 App Router + OpenAI Realtime API
+ */
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-900">
+      <div className="container mx-auto px-4 py-8">
+        {/* ヘッダー */}
+        <header className="text-center mb-8">
+          <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
+            🏔️ 博多ポートラジオ
+          </h1>
+          <p className="text-xl text-blue-100 mb-2">
+            海上交通管制システム - AI音声通信
+          </p>
+          <p className="text-sm text-blue-200">
+            Maritime Traffic Control - AI Voice Communication System
+          </p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        {/* メインコンテンツ */}
+        <main className="max-w-4xl mx-auto">
+          <div className="max-w-3xl mx-auto">
+            {/* 音声通信パネル（フル幅） */}
+            <VoiceRadioOfficial className="w-full" />
+          </div>
+
+          {/* 使用方法説明 */}
+          <div className="mt-8 bg-white/10 backdrop-blur rounded-lg p-6 text-white">
+            <h3 className="text-xl font-bold mb-4">📖 使用方法</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-3xl mb-2">1️⃣</div>
+                <h4 className="font-semibold mb-2">接続</h4>
+                <p className="text-sm text-gray-200">
+                  「📡 接続開始」ボタンでOpenAI Realtime APIに接続
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl mb-2">2️⃣</div>
+                <h4 className="font-semibold mb-2">通信</h4>
+                <p className="text-sm text-gray-200">
+                  PTTボタンを長押しして「博多ポートラジオ、こちら〇〇丸」で呼び出し
+                </p>
+              </div>
+              <div className="text-center">
+                <div className="text-3xl mb-2">3️⃣</div>
+                <h4 className="font-semibold mb-2">応答</h4>
+                <p className="text-sm text-gray-200">
+                  AI管制官が適切なVHFチャンネルを割り当て、音声で応答
+                </p>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* フッター */}
+        <footer className="text-center mt-12 text-blue-200">
+          <p className="text-sm">
+            Powered by OpenAI Realtime API + VoltAgent + Next.js 15
+          </p>
+          <p className="text-xs mt-2">
+            海上交通管制訓練システム - Maritime Traffic Control Training System
+          </p>
+        </footer>
+      </div>
     </div>
   );
 }
