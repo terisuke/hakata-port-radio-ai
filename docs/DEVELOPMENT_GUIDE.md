@@ -1,234 +1,425 @@
-# 開発ガイドライン
+# 開発ガイド - 博多ポートラジオAI
 
-## 📋 はじめに
-本ドキュメントは、博多ポートラジオAIシステムMVPの開発チーム向けガイドラインです。
-技術仕様書をベースに、実装に必要な具体的な指示事項を記載しています。
+## 概要
 
-## 🎯 開発フェーズと担当割り当て
+このガイドは、博多ポートラジオAIシステムの開発・メンテナンス・機能拡張を行う開発者向けの包括的な手引きです。
 
-### フェーズ1: 環境構築とプロジェクトセットアップ（1営業日）
-**担当**: フルスタックエンジニア
+## 開発環境セットアップ
 
-#### タスクリスト
-- [ ] Next.js 15プロジェクトの初期化
-  ```bash
-  npx create-next-app@latest hakata-port-radio-ai --typescript --app --tailwind
-  ```
-- [ ] 必要パッケージのインストール
-  ```bash
-  npm install @voltagent/core @voltagent/voice @voltagent/memory
-  npm install @ai-sdk/openai @ai-sdk/react
-  npm install @vercel/postgres zod
-  ```
-- [ ] Vercelプロジェクトのセットアップ
-- [ ] Vercel Postgresのプロビジョニング
+### システム要件
+- **Node.js**: 20.0.0以上 (推奨: 20.15.1)
+- **npm**: 10.0.0以上 (推奨: 10.8.2)
+- **Git**: 2.30以上
+- **VSCode**: 推奨エディタ
 
-**成果物チェックリスト**:
-- [ ] `package.json`に全ての依存関係が記載されている
-- [ ] `.env.local`が正しく設定されている
-- [ ] Vercelダッシュボードでプロジェクトが確認できる
+### 初回セットアップ
+```bash
+# リポジトリクローン
+git clone <repository-url>
+cd hakata-port-radio-ai
 
-### フェーズ2: コアエージェントの構築（3営業日）
-**担当**: バックエンドエンジニア
+# 依存関係インストール
+npm install
 
-#### 実装要件
+# 環境変数設定
+cp .env.template .env.local
 
-1. **VoltAgent初期化** (`/app/api/agent/route.ts`)
-   - Vercel AI Gateway経由でOpenAIに接続
-   - システムプロンプトの実装
-   - 音声プラグインの組み込み
+# VSCode推奨拡張機能インストール
+# - TypeScript
+# - Tailwind CSS IntelliSense
+# - Prettier
+# - ESLint
+```
 
-2. **チャンネル割り当てツール実装**
-   ```typescript
-   // 必須スキーマ
-   - vesselName: string
-   - request: string
-   - 返り値: { success: boolean, channel: number }
-   ```
+### 環境変数設定
+```env
+# .env.local
+NEXT_PUBLIC_OPENAI_API_KEY=sk-proj-your-openai-api-key
+```
 
-3. **テストケース作成**
-   - [ ] 基本的な呼び出し・応答フロー
-   - [ ] チャンネル割り当てロジック
-   - [ ] エラーハンドリング
+## 開発ワークフロー
 
-**レビューポイント**:
-- システムプロンプトは海事通信の専門性を反映しているか
-- ファンクションコールのスキーマは適切に定義されているか
-- エラーハンドリングは実装されているか
+### Git ブランチ戦略
+```
+main          (プロダクション)
+├── develop   (開発統合)
+    ├── feature/ptt-improvement
+    ├── feature/channel-management
+    └── bugfix/audio-latency
+```
 
-### フェーズ3: フロントエンドUI実装（3営業日）
-**担当**: フロントエンドエンジニア
-
-#### コンポーネント仕様
-
-1. **ChannelTable.tsx**
-   - 列: チャンネル番号、船舶名、要件、ステータス、最終更新
-   - リアルタイム更新対応（WebSocket経由）
-   - レスポンシブデザイン
-
-2. **PttButton.tsx**
-   - onMouseDown/onMouseUp ハンドラー
-   - モバイル対応（onTouchStart/onTouchEnd）
-   - 録音状態の視覚的フィードバック
-
-3. **メインページ統合** (`/app/page.tsx`)
-   - Vercel AI SDK v5の`useChat`フック使用
-   - WebSocket接続管理
-   - エラー表示UI
-
-**デザイン要件**:
-- [ ] ダークモード対応を検討
-- [ ] アクセシビリティ（WCAG 2.1 AA準拠）
-- [ ] モバイルファーストアプローチ
-
-### フェーズ4: バックエンドロジックとAPI連携（3営業日）
-**担当**: フルスタックエンジニア
-
-#### 実装項目
-
-1. **WebRTC音声キャプチャ**
-   - MediaRecorder API実装
-   - チャンク送信（250ms間隔推奨）
-   - ストリーム管理
-
-2. **WebSocket通信**
-   - `/api/voice/route.ts`でWebSocket待ち受け
-   - 双方向通信の実装
-   - 再接続ロジック
-
-3. **セッション管理**
-   - 5分タイムアウトの実装
-   - 自動クリーンアップ
-   - 状態の永続化
-
-**注意事項**:
-⚠️ **WebSocket + Serverless環境のリスク対策必須**（RISK_MITIGATION.md参照）
-
-### フェーズ5: 統合テストとデバッグ（2営業日）
-**担当**: QAエンジニア + 全チーム
-
-#### テストシナリオ
-
-1. **正常系テスト**
-   - [ ] 完全な対話フロー（呼び出し→応答→チャンネル割り当て→確認）
-   - [ ] 複数セッションの同時処理
-   - [ ] UIテーブルのリアルタイム更新
-
-2. **異常系テスト**
-   - [ ] 不明瞭な音声入力
-   - [ ] ネットワーク切断・再接続
-   - [ ] タイムアウト処理
-   - [ ] APIレート制限到達時
-
-3. **パフォーマンステスト**
-   - [ ] 応答遅延測定（目標: <500ms）
-   - [ ] 同時接続数の限界確認
-   - [ ] メモリリーク検査
-
-**VoltOps監視設定**:
-- [ ] エージェントトレースの有効化
-- [ ] アラート設定
-- [ ] ダッシュボード構成
-
-### フェーズ6: Vercelデプロイと最終検証（1営業日）
-**担当**: DevOpsエンジニア
-
-#### デプロイ手順
-
-1. **環境変数設定**
-   ```
-   OPENAI_API_KEY
-   POSTGRES_URL
-   VOLTOPS_API_KEY
-   ```
-
-2. **デプロイコマンド**
+### 開発サイクル
+1. **機能ブランチ作成**
    ```bash
-   vercel --prod
+   git checkout develop
+   git pull origin develop
+   git checkout -b feature/new-feature
    ```
 
-3. **動作確認項目**
-   - [ ] HTTPS/WSS接続の確認
-   - [ ] 本番環境での音声対話テスト
-   - [ ] データベース接続確認
-   - [ ] モニタリングツールの動作確認
+2. **開発・テスト**
+   ```bash
+   npm run dev         # 開発サーバー起動
+   npm run type-check  # 型チェック
+   npm run lint        # コード品質チェック
+   ```
 
-## 🛠️ 技術スタック詳細
+3. **コミット・プッシュ**
+   ```bash
+   git add .
+   git commit -m "feat: add new feature description"
+   git push origin feature/new-feature
+   ```
 
-### 必須バージョン
-- Next.js: 15.x
-- Vercel AI SDK: 5.x
-- VoltAgent: 最新版
-- Node.js: 20.x以上
+4. **プルリクエスト作成**
+   - develop ブランチへのPR
+   - レビュー後マージ
 
-### APIエンドポイント設計
+## プロジェクト構造
 
 ```
-POST   /api/agent          # エージェント初期化
-WS     /api/voice          # 音声ストリーミング
-GET    /api/channels       # チャンネル状況取得
-POST   /api/channels/:id   # チャンネル更新
+src/
+├── components/           # Reactコンポーネント
+│   ├── VoiceRadioOfficial.tsx    # メイン音声UI
+│   └── VoiceRadio.tsx            # 旧版（参考用）
+├── app/                  # Next.js App Router
+│   ├── api/              # API Routes
+│   │   └── realtime/session/     # OpenAI API連携
+│   ├── globals.css       # グローバルスタイル
+│   ├── layout.tsx        # アプリケーションレイアウト
+│   └── page.tsx          # メインページ
+└── lib/                  # ユーティリティ・設定
+    └── agent/            # エージェント設定
+        ├── custom-volt-agent.ts     # 旧VoltAgent（非使用）
+        └── hakata-port-agent.ts     # ポートラジオ設定
 ```
 
-## 📐 コーディング規約
+## 主要コンポーネント解説
 
-### TypeScript
-- 厳密な型定義（`strict: true`）
-- インターフェース優先（typeよりinterface）
-- エラーは必ずError型で扱う
+### VoiceRadioOfficial.tsx
 
-### React/Next.js
-- 関数コンポーネント使用
-- Server Componentsを活用
-- use clientは必要最小限に
+メインの音声通信コンポーネント。以下の機能を統合：
 
-### 命名規則
-- コンポーネント: PascalCase
-- 関数: camelCase
-- 定数: UPPER_SNAKE_CASE
-- ファイル: kebab-case（コンポーネントはPascalCase）
+#### 状態管理
+```typescript
+interface VoiceRadioState {
+  isConnected: boolean;        // OpenAI接続状態
+  isTransmitting: boolean;     // PTT送信状態
+  connectionStatus: string;    // 接続ステータス表示
+  isResponding: boolean;       // AI応答生成中
+  audioPlaying: boolean;       // 音声再生中
+  channelStatuses: ChannelStatus[];  // VHFチャンネル状態
+}
+```
 
-## 🔍 コードレビュー基準
+#### PTT制御の実装
+```typescript
+// PTT開始（音声認識有効化）
+const startTransmission = async () => {
+  sessionRef.current.mute(false);  // ミュート解除
+  setIsTransmitting(true);
+  setConnectionStatus('送信中 - PTT ON');
+};
 
-### 必須チェック項目
-- [ ] TypeScriptの型エラーがない
-- [ ] ESLintエラーがない
-- [ ] 適切なエラーハンドリング
-- [ ] 機密情報のハードコーディングなし
-- [ ] パフォーマンスの考慮
+// PTT終了（音声認識無効化）
+const stopTransmission = async () => {
+  sessionRef.current.mute(true);   // ミュート復帰
+  setIsTransmitting(false);
+  setConnectionStatus('PTT待機中（ミュート）');
+};
+```
 
-### 推奨チェック項目
-- [ ] コードの可読性
-- [ ] 適切なコメント
-- [ ] テストカバレッジ
-- [ ] アクセシビリティ
+#### Function Calling実装
+```typescript
+tools: [
+  tool({
+    name: 'assignVHFChannel',
+    parameters: z.object({
+      vesselName: z.string(),
+      requestType: z.string(),
+      priority: z.enum(['normal', 'urgent', 'emergency'])
+    }),
+    execute: async (params) => {
+      const channel = assignChannel(params.vesselName);
+      return JSON.stringify({
+        success: channel > 0,
+        assignedChannel: channel,
+        ...params
+      });
+    }
+  })
+]
+```
 
-## 📊 進捗報告
+## 音声処理アーキテクチャ
 
-### 日次スタンドアップ（必須）
-- 完了したタスク
-- 本日の作業予定
-- ブロッカー/課題
+### OpenAI Realtime API統合
 
-### 週次レビュー
-- デモ実施
-- 次週の計画確認
-- リスク評価更新
+#### エージェント設定
+```typescript
+const createPortRadioAgent = () => {
+  return new RealtimeAgent({
+    name: "博多ポートラジオ管制官",
+    instructions: `
+      IMO SMCP準拠の海事通信プロトコル実装
+      PTTシステムでの1対1通信制御
+    `,
+    voice: "alloy",  // 管制官らしい落ち着いた声
+    tools: [/* Function Calling定義 */]
+  });
+};
+```
 
-## ⚠️ エスカレーション
+#### セッション管理
+```typescript
+const session = new RealtimeSession(agent);
+await session.connect({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  model: "gpt-4o-realtime-preview"
+});
 
-以下の場合は即座にPdMに報告:
-- 技術的なブロッカーの発生
-- 想定以上の遅延（半日以上）
-- 仕様の不明点
-- セキュリティ上の懸念
+// デフォルトミュート（PTT制御用）
+session.mute(true);
+```
 
-## 📚 参考資料
+### イベント処理フロー
 
-- [VoltAgent Documentation](https://voltagent.com/docs)
-- [OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime)
-- [Vercel Documentation](https://vercel.com/docs)
-- [IMO SMCP Reference](https://www.imo.org/en/OurWork/Safety/Pages/StandardMarineCommunicationPhrases.aspx)
+```typescript
+const setupSessionHandlers = (session) => {
+  // 音声応答制御
+  session.on('agent_start', handleAgentStart);
+  session.on('agent_end', handleAgentEnd);
+  
+  // Function Call処理
+  session.on('agent_tool_start', handleToolStart);
+  session.on('agent_tool_end', handleToolEnd);
+  
+  // エラーハンドリング
+  session.on('error', handleSessionError);
+};
+```
+
+## テスト・品質管理
+
+### 自動テスト
+```bash
+npm run test         # Jest単体テスト
+npm run test:watch   # ウォッチモード
+npm run test:coverage # カバレッジレポート
+```
+
+### 品質チェック
+```bash
+npm run type-check   # TypeScript型チェック
+npm run lint         # ESLintチェック
+npm run format       # Prettier整形
+```
+
+### マニュアルテスト項目
+
+#### 基本機能テスト
+1. **接続テスト**
+   - [ ] 管制システム接続成功
+   - [ ] 接続エラーハンドリング
+   - [ ] 再接続機能
+
+2. **PTT機能テスト**
+   - [ ] ボタン押下で音声認識開始
+   - [ ] ボタン解放で音声認識停止
+   - [ ] ボタン未押下時は無反応
+
+3. **音声通信テスト**
+   - [ ] 基本呼出: "博多ポートラジオ、こちらさくら丸"
+   - [ ] 応答確認: "こちら博多ポートラジオ、さくら丸どうぞ"
+   - [ ] 音声品質確認
+
+4. **チャンネル管理テスト**
+   - [ ] 入港要請でチャンネル自動割当
+   - [ ] UI状態の即座更新
+   - [ ] チャンネル解放機能
+
+## デバッグとトラブルシューティング
+
+### よくある問題
+
+#### 1. 音声認識が動作しない
+```typescript
+// デバッグ用ログ確認
+console.log('セッション状態:', sessionRef.current);
+console.log('ミュート状態:', isTransmitting ? 'OFF' : 'ON');
+```
+
+**解決策:**
+- ブラウザのマイク権限確認
+- HTTPS接続確認
+- OpenAI APIキーの有効性確認
+
+#### 2. Function Callingが実行されない
+```typescript
+// ツール実行ログ確認
+session.on('agent_tool_start', (context, agent, tool, details) => {
+  console.log('ツール実行開始:', tool.name, details);
+});
+```
+
+**解決策:**
+- プロンプトの明確化
+- パラメータスキーマ確認
+- 実行条件の見直し
+
+#### 3. 音声応答が途切れる
+```typescript
+// 音声イベント監視
+session.on('audio_start', () => console.log('音声開始'));
+session.on('audio_stopped', () => console.log('音声終了'));
+```
+
+**解決策:**
+- 応答タイムアウト設定調整
+- 連続応答防止ロジック確認
+
+### ログ分析
+
+#### デバッグログの活用
+```typescript
+// 詳細ログ設定
+const DEBUG = process.env.NODE_ENV === 'development';
+
+const log = (message: string, data?: any) => {
+  if (DEBUG) {
+    console.log(`[VoiceRadio] ${message}`, data);
+  }
+};
+```
+
+#### パフォーマンス監視
+```typescript
+// レスポンス時間測定
+const startTime = performance.now();
+await session.connect(options);
+const connectionTime = performance.now() - startTime;
+console.log(`接続時間: ${connectionTime}ms`);
+```
+
+## デプロイメント
+
+### 本番ビルド
+```bash
+npm run build        # プロダクションビルド
+npm start            # ローカル本番サーバー
+```
+
+### Vercelデプロイ
+```bash
+# 初回セットアップ
+npx vercel login
+npx vercel link
+
+# デプロイ
+npx vercel --prod
+```
+
+### 環境変数設定（Vercel）
+```bash
+vercel env add NEXT_PUBLIC_OPENAI_API_KEY
+```
+
+## パフォーマンス最適化
+
+### バンドルサイズ最適化
+```typescript
+// 動的インポート使用
+const VoiceRadioOfficial = dynamic(
+  () => import('./components/VoiceRadioOfficial'),
+  { loading: () => <p>Loading...</p> }
+);
+```
+
+### メモリ使用量最適化
+```typescript
+// クリーンアップ処理
+useEffect(() => {
+  return () => {
+    if (sessionRef.current) {
+      sessionRef.current.close();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+    }
+  };
+}, []);
+```
+
+## セキュリティ考慮事項
+
+### API Key保護
+- 環境変数での管理
+- クライアント側での検証
+- 本番環境での暗号化
+
+### データ保護
+- 音声データの一時保存のみ
+- セッション終了時の完全削除
+- HTTPS通信の強制
+
+## 機能拡張ガイドライン
+
+### 新機能追加の手順
+1. **要件分析**
+   - ユーザーストーリー作成
+   - 技術仕様検討
+
+2. **設計**
+   - アーキテクチャ影響評価
+   - インターフェース設計
+
+3. **実装**
+   - 段階的開発
+   - テスト駆動開発
+
+4. **テスト・検証**
+   - 単体テスト作成
+   - 統合テスト実行
+
+### コーディング規約
+
+#### TypeScript
+```typescript
+// インターフェース命名: PascalCase
+interface VoiceRadioProps {
+  className?: string;
+}
+
+// 関数命名: camelCase
+const startTransmission = async () => {};
+
+// 定数命名: UPPER_SNAKE_CASE
+const DEFAULT_CHANNELS = [8, 10, 12];
+```
+
+#### React Hooks
+```typescript
+// カスタムフック
+const useVoiceRadio = () => {
+  const [isConnected, setIsConnected] = useState(false);
+  // ...
+  return { isConnected, startConnection };
+};
+```
+
+## コントリビューション
+
+### プルリクエストガイドライン
+1. **ブランチ命名**: feature/issue-123-description
+2. **コミットメッセージ**: Conventional Commits準拠
+3. **テスト**: 新機能には必ずテスト追加
+4. **ドキュメント**: APIの変更は文書も更新
+
+### レビュープロセス
+1. 自動チェック通過確認
+2. コードレビュー実施
+3. マニュアルテスト実行
+4. 承認後マージ
 
 ---
-最終更新: 2025年9月
+
+このガイドは随時更新されます。不明な点があれば、開発チームまでお問い合わせください。
