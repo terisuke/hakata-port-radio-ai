@@ -10,7 +10,7 @@
 |-----|------|-----------|---------|
 | **フレームワーク** | Next.js | 15.5.2 | ✅ 完成 |
 | **言語** | TypeScript | 5.0+ | ✅ 完成 |
-| **音声AI** | OpenAI Realtime API | gpt-4o-realtime-preview | ✅ 完成 |
+| **音声AI** | OpenAI Realtime API | gpt-realtime | ✅ 完成 |
 | **AI SDK** | @openai/agents-realtime | 0.1.0 | ✅ 完成 |
 | **UI** | TailwindCSS | 4.0 | ✅ 完成 |
 | **スキーマ** | Zod | 3.23+ | ✅ 完成 |
@@ -95,7 +95,7 @@ WebRTC Audio      Function Calls    Audio Processing
 ### システム要件
 - **Node.js**: ≥20.0.0
 - **npm**: ≥10.0.0
-- **OpenAI API**: gpt-4o-realtime-preview 対応
+- **OpenAI API**: gpt-realtime 対応
 
 ### ブラウザ要件
 - **Chrome**: 88+

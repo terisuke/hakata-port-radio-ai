@@ -181,7 +181,7 @@ const startConnection = async () => {
   
   await session.connect({
     apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-    model: "gpt-4o-realtime-preview"
+    model: "gpt-realtime"
   });
   
   // デフォルトでミュート（PTT制御用）
@@ -292,7 +292,7 @@ if (!apiKey || !apiKey.startsWith('sk-proj-')) {
 ### API制約
 - **OpenAI Realtime**: 同時接続数制限
 - **レート制限**: API呼出数制限
-- **モデル制約**: gpt-4o-realtime-previewのみ対応
+- **モデル制約**: gpt-realtimeのみ対応
 
 ## デプロイメント要件
 

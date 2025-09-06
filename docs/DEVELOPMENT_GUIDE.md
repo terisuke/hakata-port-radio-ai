@@ -174,7 +174,7 @@ const createPortRadioAgent = () => {
 const session = new RealtimeSession(agent);
 await session.connect({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
-  model: "gpt-4o-realtime-preview"
+  model: "gpt-realtime"
 });
 
 // デフォルトミュート（PTT制御用）

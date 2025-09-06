@@ -100,7 +100,7 @@ tools: [
 - **Node.js**: >=20.0.0
 - **npm**: >=10.0.0
 - **ブラウザ**: Chrome 88+, Firefox 90+, Safari 14+
-- **OpenAI API Key**: GPT-4o Realtime Preview対応
+- **OpenAI API Key**: gpt-realtime モデル対応
 
 ## ⚡ クイックスタート
 

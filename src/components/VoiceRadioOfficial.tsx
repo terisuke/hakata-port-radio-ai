@@ -187,7 +187,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
       // OpenAI APIキーで接続
       await session.connect({
         apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || await getClientApiKey(),
-        model: "gpt-4o-realtime-preview"
+        model: "gpt-realtime"
       });
       
       // セッションを完全にミュート（PTT使用時のみ有効化）
