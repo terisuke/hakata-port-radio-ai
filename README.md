@@ -157,6 +157,100 @@ const assignChannel = (vesselName: string): number => {
 };
 ```
 
+## 📐 実装アーキテクチャの進化
+
+### コンポーネント構成と役割
+
+本プロジェクトには2つの主要な音声通信コンポーネントがあります。これは技術選択の進化を反映した意図的な構成です。
+
+#### `src/components/VoiceRadioOfficial.tsx` 【現行・推奨】
+**技術アプローチ**: 公式SDK + 高レベル抽象化
+- **使用技術**: `@openai/agents-realtime` 公式ライブラリ
+- **実装方式**: RealtimeAgent + RealtimeSession
+- **PTT制御**: `session.mute(false/true)` による制御
+- **機能**: Function Calling, チャンネル管理, IMO SMCP準拠
+- **音声処理**: SDK内蔵の最適化された処理
+
+```typescript
+// シンプルで信頼性の高い実装
+const session = new RealtimeSession(agent);
+session.mute(true);   // PTT待機中
+session.mute(false);  // PTT送信中
+```
+
+#### `src/components/VoiceRadio.tsx` 【参考・非推奨】
+**技術アプローチ**: 低レベルWebSocket + 手動音声処理
+- **使用技術**: 直接WebSocket接続 + MediaRecorder
+- **実装方式**: 手動WebSocket操作 + AudioContext制御
+- **PTT制御**: MediaStream開始/停止による制御
+- **機能**: 基本的な音声通信のみ
+- **音声処理**: 手動PCM16処理が必要
+
+```typescript
+// 複雑で保守が困難な実装
+const wsUrl = `wss://api.openai.com/v1/realtime?auth=${clientSecret}`;
+const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+```
+
+### 実装進化の3段階
+
+| 段階 | 期間 | 技術スタック | 状態 | 主要課題 |
+|------|------|-------------|------|----------|
+| **Phase 1** | 初期設計 | VoltAgent + Vercel AI SDK | 計画段階 | VoltAgent音声制限 |
+| **Phase 2** | プロトタイプ | 手動WebSocket + MediaRecorder | 参考実装 | 複雑性・保守性 |  
+| **Phase 3** | プロダクション | @openai/agents-realtime | 現行実装 | - |
+
+### 技術選択の判断理由
+
+#### なぜ公式SDKに移行したか
+1. **開発効率**: 手動WebSocket実装 vs 高レベルAPI
+2. **信頼性**: 公式サポート vs 自前実装
+3. **機能完成度**: Function Calling等の統合機能
+4. **保守性**: SDKアップデート追従 vs 個別メンテナンス
+
+#### 比較表：実装方式の違い
+
+| 項目 | VoiceRadio.tsx | VoiceRadioOfficial.tsx | 採用理由 |
+|------|---------------|----------------------|---------|
+| **開発工数** | 大（手動実装多数） | 小（SDK活用） | ⭐⭐⭐ |
+| **音声品質** | 要調整 | SDK最適化済み | ⭐⭐⭐ |
+| **エラー処理** | 自前実装 | SDK内蔵 | ⭐⭐⭐ |
+| **Function Call** | 未対応 | 完全統合 | ⭐⭐⭐ |
+| **保守性** | 困難 | 容易 | ⭐⭐⭐ |
+
+### ファイル使用推奨
+
+- **メインページ**: `VoiceRadioOfficial.tsx`を使用
+- **プロダクション**: 完全に`VoiceRadioOfficial.tsx`に依存
+- **VoiceRadio.tsx**: 技術参考用（削除予定）
+
+### コード例：進化の対比
+
+#### 旧実装（VoiceRadio.tsx）
+```typescript
+// 複雑な手動WebSocket制御
+ws.send(JSON.stringify({
+  type: 'input_audio_buffer.append',
+  audio: base64AudioData
+}));
+
+// 手動PCM16音声処理
+const binaryData = atob(deltaData);
+const bytes = new Uint8Array(binaryData.length);
+```
+
+#### 現行実装（VoiceRadioOfficial.tsx）
+```typescript
+// シンプルなSDK利用
+const agent = new RealtimeAgent({
+  tools: [assignVHFChannel],
+  instructions: IMO_SMCP_PROTOCOL
+});
+
+// 直感的なPTT制御
+session.mute(!isTransmitting);
+```
+
 ## 🛠️ 開発とテスト
 
 ### 開発コマンド
