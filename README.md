@@ -240,7 +240,7 @@ vercel --prod
 
 - **Issues**: [GitHub Issues](https://github.com/your-org/hakata-port-radio-ai/issues)
 - **Discussion**: プロジェクト Discord
-- **Email**: support@your-org.com
+- **Email**: company@cor-jp.com
 
 ---
 
