@@ -27,10 +27,6 @@
   },
   "dependencies": {
     "@openai/agents-realtime": "^0.1.0",
-    "@vercel/postgres": "^0.10.0",
-    "@voltagent/core": "^0.1.86",
-    "@voltagent/vercel-ai": "^1.0.0",
-    "ai": "^3.4.0",
     "clsx": "^2.1.0",
     "next": "15.5.2",
     "react": "19.1.0",
