@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { RealtimeAgent, RealtimeSession, FunctionTool, tool } from '@openai/agents-realtime';
 import { z } from 'zod';
 
@@ -67,7 +67,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     ];
   };
 
-  const resetAllChannels = () => {
+  const resetAllChannels = useCallback(() => {
     const defaultChannels = [
       { channel: 8, status: 'available' as const, usageCount: 0 },
       { channel: 10, status: 'available' as const, usageCount: 0 },
@@ -76,7 +76,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     setChannelStatuses(defaultChannels);
     saveChannelStatuses(defaultChannels);
     console.log('🔄 全チャンネルをリセットしました');
-  };
+  }, []);
 
   // コンポーネント初期化時にlocalStorageから読み込み
   useEffect(() => {
@@ -85,63 +85,68 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     console.log('📂 チャンネル状態をlocalStorageから復元:', loaded);
   }, []);
 
-  // チャンネル割り当て機能（バランス型）- localStorageから直接読み込み
-  const assignChannel = (vesselName: string): number => {
-    // 最新状態をlocalStorageから直接読み込み
-    const currentStatuses = loadChannelStatuses();
+  // チャンネル割り当て機能（バランス型）- Race Condition対策済み
+  const assignChannel = useCallback((vesselName: string): number => {
+    let assignedChannel = 0;
     
-    // 利用可能なチャンネルを取得
-    const availableChannels = currentStatuses.filter(ch => ch.status === 'available');
-    
-    if (availableChannels.length === 0) {
-      console.log('⚠️ 利用可能なチャンネルがありません');
-      return 0; // エラー値
-    }
+    setChannelStatuses(prevStatuses => {
+      // 利用可能なチャンネルを取得（原子的操作内で実行）
+      const availableChannels = prevStatuses.filter(ch => ch.status === 'available');
+      
+      if (availableChannels.length === 0) {
+        console.log('⚠️ 利用可能なチャンネルがありません');
+        assignedChannel = 0;
+        return prevStatuses; // 状態変更なし
+      }
 
-    // 最も使用回数の少ないチャンネルを選択（負荷分散）
-    const selectedChannel = availableChannels.reduce((prev, current) => {
-      const prevUsage = prev.usageCount || 0;
-      const currentUsage = current.usageCount || 0;
-      return prevUsage <= currentUsage ? prev : current;
+      // 最も使用回数の少ないチャンネルを選択（負荷分散）
+      const selectedChannel = availableChannels.reduce((prev, current) => {
+        const prevUsage = prev.usageCount || 0;
+        const currentUsage = current.usageCount || 0;
+        return prevUsage <= currentUsage ? prev : current;
+      });
+
+      assignedChannel = selectedChannel.channel;
+
+      // 状態を更新（原子的操作）
+      const updatedStatuses = prevStatuses.map(ch => 
+        ch.channel === selectedChannel.channel 
+          ? { 
+              ...ch, 
+              status: 'assigned' as const, 
+              vesselName, 
+              assignedAt: new Date().toLocaleTimeString('ja-JP'),
+              usageCount: (ch.usageCount || 0) + 1
+            }
+          : ch
+      );
+      
+      // localStorage保存（updater function内で実行）
+      saveChannelStatuses(updatedStatuses);
+
+      console.log(`📻 チャンネル${selectedChannel.channel}を${vesselName}に割り当て（使用回数: ${(selectedChannel.usageCount || 0) + 1}）`);
+      return updatedStatuses;
     });
 
-    // 状態を更新
-    const updatedStatuses = currentStatuses.map(ch => 
-      ch.channel === selectedChannel.channel 
-        ? { 
-            ...ch, 
-            status: 'assigned' as const, 
-            vesselName, 
-            assignedAt: new Date().toLocaleTimeString('ja-JP'),
-            usageCount: (ch.usageCount || 0) + 1
-          }
-        : ch
-    );
-    
-    // UIとlocalStorageを更新
-    setChannelStatuses(updatedStatuses);
-    saveChannelStatuses(updatedStatuses);
+    return assignedChannel;
+  }, []);
 
-    console.log(`📻 チャンネル${selectedChannel.channel}を${vesselName}に割り当て（使用回数: ${(selectedChannel.usageCount || 0) + 1}）`);
-    return selectedChannel.channel;
-  };
-
-  // チャンネル解放機能 - localStorageから直接読み込み
-  const releaseChannel = (channel: number) => {
-    // 最新状態をlocalStorageから直接読み込み
-    const currentStatuses = loadChannelStatuses();
-    
-    const updatedStatuses = currentStatuses.map(ch => 
-      ch.channel === channel 
-        ? { channel, status: 'available' as const, usageCount: ch.usageCount || 0 }
-        : ch
-    );
-    
-    // UIとlocalStorageを更新
-    setChannelStatuses(updatedStatuses);
-    saveChannelStatuses(updatedStatuses);
-    console.log(`📻 チャンネル${channel}を解放`);
-  };
+  // チャンネル解放機能 - Race Condition対策済み
+  const releaseChannel = useCallback((channel: number) => {
+    setChannelStatuses(prevStatuses => {
+      // 原子的操作内でチャンネル解放
+      const updatedStatuses = prevStatuses.map(ch => 
+        ch.channel === channel 
+          ? { channel, status: 'available' as const, usageCount: ch.usageCount || 0 }
+          : ch
+      );
+      
+      // localStorage保存（updater function内で実行）
+      saveChannelStatuses(updatedStatuses);
+      console.log(`📻 チャンネル${channel}を解放`);
+      return updatedStatuses;
+    });
+  }, []);
 
 
   // 博多ポートラジオ専用エージェント作成
@@ -464,8 +469,15 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
   };
 
-  // セッション切断
-  const disconnect = async () => {
+  // セッション切断 - メモ化とクリーンアップ強化
+  const disconnect = useCallback(async () => {
+    // 全てのタイムアウトをクリア
+    if (responseTimeoutRef.current) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
+    }
+
+    // セッション切断
     if (sessionRef.current) {
       try {
         sessionRef.current.close();
@@ -478,7 +490,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
         console.error('切断エラー:', error);
       }
     }
-  };
+  }, []);
 
   // マイクストリーム用のref（使用しないが残しておく）
   const streamRef = useRef<MediaStream | null>(null);
@@ -528,20 +540,25 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     }
   };
 
-  // クリーンアップ
+  // クリーンアップ - Memory Leak対策強化
   useEffect(() => {
     return () => {
-      // タイムアウトクリア
+      // 全ての非同期処理とリソースをクリーンアップ
       if (responseTimeoutRef.current) {
         clearTimeout(responseTimeoutRef.current);
+        responseTimeoutRef.current = null;
       }
-      // ストリーム停止
+      
+      // MediaStreamのクリーンアップ
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
+      
+      // セッション切断（非同期処理だが、クリーンアップ時は呼び出す）
       disconnect();
     };
-  }, []);
+  }, [disconnect]);
 
   return (
     <div className={`p-6 bg-gray-900 text-white rounded-lg ${className}`}>
