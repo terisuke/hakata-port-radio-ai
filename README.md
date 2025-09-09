@@ -83,6 +83,114 @@ tools: [
 
 これらの規則がOpenAI Realtime APIの**システムプロンプト**として実装され、AI管制官が国際海事機関の標準通信規則に従って応答するよう制御しています。
 
+## ✨ 最新機能改善 (v2.1.0)
+
+### 🎯 港湾管制の効率化と実用性向上
+
+#### 1. **簡潔な応答スタイルの実現**
+**実際の港湾無線に合わせたワンストローク短縮**
+```
+修正前: "こちら博多ポートラジオ、さくら丸どうぞ" → "チャンネル8でお願いします"
+修正後: "さくら丸、チャンネル8へお願いします" (1回で完結)
+```
+
+#### 2. **複数隻同時管理システム**
+**localStorage活用による永続的チャンネル管理**
+```typescript
+// 使用回数ベースの負荷分散アルゴリズム
+const selectedChannel = availableChannels.reduce((prev, current) => {
+  const prevUsage = prev.usageCount || 0;
+  const currentUsage = current.usageCount || 0;
+  return prevUsage <= currentUsage ? prev : current;
+});
+```
+- **負荷分散**: Channel 8だけでなく、10、12も均等に活用
+- **状態永続化**: ページリロード後も複数隻の割り当て状態を維持
+- **使用統計**: 各チャンネルの使用回数をUI表示
+
+#### 3. **自動チャンネル解放機能**
+**音声認識による自動解放システム**
+```typescript
+tool({
+  name: 'releaseVHFChannel',
+  description: '船舶からの通信終了通知により、VHFチャンネルを解放',
+  execute: async ({ vesselName, message }) => {
+    // 該当船舶のチャンネルを自動解放
+    releaseChannel(assignedChannel.channel);
+  }
+})
+```
+- **音声トリガー**: 「終了します」「サインオフ」で自動解放
+- **実際の無線手順**: 実在の海事通信プロトコルに準拠
+
+#### 4. **管制システムリセット機能**
+**運用管理のための状態管理**
+```typescript
+const resetAllChannels = () => {
+  const defaultChannels = [
+    { channel: 8, status: 'available', usageCount: 0 },
+    { channel: 10, status: 'available', usageCount: 0 },
+    { channel: 12, status: 'available', usageCount: 0 }
+  ];
+  setChannelStatuses(defaultChannels);
+  saveChannelStatuses(defaultChannels); // localStorage同期
+};
+```
+- **意識的クリア**: 🔄ボタンによる全チャンネル状態リセット
+- **永続化データクリア**: localStorage含む完全初期化
+
+### 📊 改善効果
+
+| 項目 | 改善前 | 改善後 | 向上率 |
+|------|-------|-------|--------|
+| **応答効率** | 2段階応答 | 1段階応答 | 50%短縮 |
+| **チャンネル活用** | Ch.8のみ | Ch.8/10/12均等 | 300%向上 |
+| **セッション管理** | 単発のみ | 永続的複数隻 | 無限 |
+| **運用継続性** | リロードで初期化 | 状態保持 | ✅持続 |
+
+### 🔧 技術実装詳細
+
+#### localStorage統合パターン
+```typescript
+// 永続化対応の状態更新パターン
+const updateChannelWithPersistence = (updatedStatuses: ChannelStatus[]) => {
+  setChannelStatuses(updatedStatuses);    // React State
+  saveChannelStatuses(updatedStatuses);   // localStorage
+};
+
+// 最新状態の確実な参照
+const assignChannel = (vesselName: string) => {
+  const currentStatuses = loadChannelStatuses(); // localStorage優先
+  // 割り当てロジック実行
+};
+```
+
+#### Function Calling強制実行
+```typescript
+# システムプロンプト強化
+- 【必須】船舶の初回呼び出し時、まずassignVHFChannelツールを実行する
+- ツール実行結果を待ってから、その結果のチャンネル番号で応答する
+- ツール実行なしでチャンネル番号を発言することは禁止
+```
+
+### 🚀 使用シナリオ例
+
+```
+1. さくら丸: "博多ポートラジオ、こちらさくら丸"
+   → AI: "さくら丸、チャンネル8へお願いします" (Ch.8割当)
+
+2. はやぶさ号: "博多ポートラジオ、こちらはやぶさ号" 
+   → AI: "はやぶさ号、チャンネル10へお願いします" (Ch.10割当)
+
+3. つばめ号: "博多ポートラジオ、こちらつばめ号"
+   → AI: "つばめ号、チャンネル12へお願いします" (Ch.12割当)
+
+4. さくら丸: "終了します"
+   → AI: "さくら丸、了解しました" (Ch.8自動解放)
+
+5. 新しい船舶 → 最小使用回数のCh.8を再割当
+```
+
 ## 🚀 技術スタック
 
 | 分野 | 技術 | バージョン | 採用理由 |
@@ -134,6 +242,9 @@ npm run dev
 2. **「🎤 長押しで送信 - PTT」** ボタンを長押し
 3. **「博多ポートラジオ、こちらさくら丸」** と発話
 4. ボタンを離すとAI管制官が応答
+5. **複数隻の同時管理**: 異なる船舶名で次々と呼び出し可能
+6. **チャンネル解放**: 「終了します」「サインオフ」でチャンネル自動解放
+7. **管制リセット**: 🔄ボタンで全チャンネル状態をクリア
 
 ## 🏗️ アーキテクチャ
 
