@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { RealtimeAgent, RealtimeSession, FunctionTool, tool } from '@openai/agents-realtime';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { RealtimeAgent, RealtimeSession, tool } from '@openai/agents-realtime';
 import { z } from 'zod';
 
 /**
@@ -19,6 +19,7 @@ interface ChannelStatus {
   status: 'available' | 'busy' | 'assigned';
   vesselName?: string;
   assignedAt?: string;
+  usageCount?: number; // 使用回数統計
 }
 
 export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficialProps) {
@@ -30,51 +31,120 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
   const [audioPlaying, setAudioPlaying] = useState(false);
   
   // チャンネル管理状態
-  const [channelStatuses, setChannelStatuses] = useState<ChannelStatus[]>([
-    { channel: 8, status: 'available' },
-    { channel: 10, status: 'available' },
-    { channel: 12, status: 'available' }
-  ]);
+  const [channelStatuses, setChannelStatuses] = useState<ChannelStatus[]>([]);
+  
+  // localStorageキー
+  const STORAGE_KEY = 'hakata-port-radio-channels';
   
   const sessionRef = useRef<RealtimeSession | null>(null);
   const agentRef = useRef<RealtimeAgent | null>(null);
   const lastResponseTimeRef = useRef<number>(0);
   const responseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // チャンネル割り当て機能
-  const assignChannel = (vesselName: string): number => {
-    const availableChannel = channelStatuses.find(ch => ch.status === 'available');
+  // チャンネル状態の永続化関数
+  const saveChannelStatuses = (statuses: ChannelStatus[]) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(statuses));
+    } catch (error) {
+      console.error('Failed to save channel statuses to localStorage:', error);
+    }
+  };
+
+  const loadChannelStatuses = (): ChannelStatus[] => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load channel statuses from localStorage:', error);
+    }
+    // デフォルト状態を返す
+    return [
+      { channel: 8, status: 'available', usageCount: 0 },
+      { channel: 10, status: 'available', usageCount: 0 },
+      { channel: 12, status: 'available', usageCount: 0 }
+    ];
+  };
+
+  const resetAllChannels = useCallback(() => {
+    const defaultChannels = [
+      { channel: 8, status: 'available' as const, usageCount: 0 },
+      { channel: 10, status: 'available' as const, usageCount: 0 },
+      { channel: 12, status: 'available' as const, usageCount: 0 }
+    ];
+    setChannelStatuses(defaultChannels);
+    saveChannelStatuses(defaultChannels);
+    console.log('🔄 全チャンネルをリセットしました');
+  }, []);
+
+  // コンポーネント初期化時にlocalStorageから読み込み
+  useEffect(() => {
+    const loaded = loadChannelStatuses();
+    setChannelStatuses(loaded);
+    console.log('📂 チャンネル状態をlocalStorageから復元:', loaded);
+  }, []);
+
+  // チャンネル割り当て機能（バランス型）- Race Condition対策済み
+  const assignChannel = useCallback((vesselName: string): number => {
+    // まず現在の状態を同期的に取得
+    const currentStatuses = loadChannelStatuses();
+    const availableChannels = currentStatuses.filter(ch => ch.status === 'available');
     
-    if (!availableChannel) {
+    if (availableChannels.length === 0) {
       console.log('⚠️ 利用可能なチャンネルがありません');
-      return 0; // エラー値
+      return 0;
     }
 
-    // UI状態を即座に更新
-    setChannelStatuses(prev => prev.map(ch => 
-      ch.channel === availableChannel.channel 
-        ? { 
-            ...ch, 
-            status: 'assigned' as const, 
-            vesselName, 
-            assignedAt: new Date().toLocaleTimeString('ja-JP') 
-          }
-        : ch
-    ));
+    // 最も使用回数の少ないチャンネルを選択（負荷分散）
+    const selectedChannel = availableChannels.reduce((prev, current) => {
+      const prevUsage = prev.usageCount || 0;
+      const currentUsage = current.usageCount || 0;
+      return prevUsage <= currentUsage ? prev : current;
+    });
 
-    console.log(`📻 チャンネル${availableChannel.channel}を${vesselName}に割り当て`);
-    return availableChannel.channel;
-  };
+    const assignedChannelNumber = selectedChannel.channel;
 
-  // チャンネル解放機能
-  const releaseChannel = (channel: number) => {
-    setChannelStatuses(prev => prev.map(ch => 
-      ch.channel === channel 
-        ? { channel, status: 'available' as const }
-        : ch
-    ));
-    console.log(`📻 チャンネル${channel}を解放`);
-  };
+    // 状態を更新（原子的操作）
+    setChannelStatuses(prevStatuses => {
+      const updatedStatuses = prevStatuses.map(ch => 
+        ch.channel === selectedChannel.channel 
+          ? { 
+              ...ch, 
+              status: 'assigned' as const, 
+              vesselName, 
+              assignedAt: new Date().toLocaleTimeString('ja-JP'),
+              usageCount: (ch.usageCount || 0) + 1
+            }
+          : ch
+      );
+      
+      // localStorage保存（updater function内で実行）
+      saveChannelStatuses(updatedStatuses);
+
+      console.log(`📻 チャンネル${selectedChannel.channel}を${vesselName}に割り当て（使用回数: ${(selectedChannel.usageCount || 0) + 1}）`);
+      return updatedStatuses;
+    });
+
+    return assignedChannelNumber;
+  }, []);
+
+  // チャンネル解放機能 - Race Condition対策済み
+  const releaseChannel = useCallback((channel: number) => {
+    setChannelStatuses(prevStatuses => {
+      // 原子的操作内でチャンネル解放
+      const updatedStatuses = prevStatuses.map(ch => 
+        ch.channel === channel 
+          ? { channel, status: 'available' as const, usageCount: ch.usageCount || 0 }
+          : ch
+      );
+      
+      // localStorage保存（updater function内で実行）
+      saveChannelStatuses(updatedStatuses);
+      console.log(`📻 チャンネル${channel}を解放`);
+      return updatedStatuses;
+    });
+  }, []);
 
 
   // 博多ポートラジオ専用エージェント作成
@@ -82,44 +152,39 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     const agent = new RealtimeAgent({
       name: "博多ポートラジオ管制官",
       instructions: `
-あなたは博多ポートラジオの熟練した管制官AIです。PTT（Push-to-Talk）システムで船舶からの通信に応答してください。
+あなたは博多ポートラジオの熟練した管制官AIです。PTT（Push-to-Talk）システムで簡潔かつ効率的な港湾無線通信を行ってください。
 
-# PTTシステムの特徴
+# PTTシステムの特徴  
 - 船舶がボタンを押している間の音声のみが送信されます
 - PTTボタンを離すと音声送信が完了し、あなたが応答する番になります
 - 1回のPTT送信に対して1回のみ応答してください
 
 # 基本的な応答プロトコル
-1. 船舶からの呼びかけ形式: "博多ポートラジオ、こちら[船舶名]"
-2. 標準応答: "こちら博多ポートラジオ、[船舶名]どうぞ"  
-3. 入港/出港要求時は必ずassignVHFChannelツールを使用してチャンネルを割り当ててください
-4. チャンネル割り当て後: "チャンネル[番号]でお願いいたします。準備ができましたらどうぞ"
-
-# 対応パターン
-- 初回呼び出し: 船舶を認識し、要件を尋ねる
-- 入港/離港要請: assignVHFChannelツールで適切なチャンネルを割り当て
-- 緊急時: 即座に対応し、必要に応じて関係機関に連絡
+1. 船舶からの呼びかけ: "博多ポートラジオ、こちら[船舶名]"
+2. 【重要】船舶名が確認できたら、まずassignVHFChannelツールを実行してください
+3. ツール実行後、その結果に基づいて応答: "[船舶名]、チャンネル[番号]へお願いします"
+4. ツールを実行せずにチャンネル番号を言ってはいけません
 
 # 使用可能なVHFチャンネル
 - Channel 8: 船舶間通信用
-- Channel 10: 港内作業連絡用  
-- Channel 12: 港務通信用
+- Channel 10: 港内作業連絡用
+- Channel 12: 港務通信用  
 
 # IMO SMCP準拠フレーズ
 - "Say again" - もう一度お願いします
-- "Roger" / "了解" - 了解しました  
+- "Roger" / "了解" - 了解しました
 - "Stand by" - 待機してください
-- "Over" / "どうぞ" - 送信終了、返信待ち
 
 # 重要な行動原則
 - 船舶から明確に呼びかけられた時のみ応答する
-- 1回のPTT送信には1回のみ応答する
-- 応答は簡潔かつ明確にする
-- 常に冷静で明確な口調を保つ
-- 安全を最優先に判断する
-- 入港/出港要求があったら必ずassignVHFChannelツールを使用する
+- 1回のPTT送信には1回のみ応答する  
+- 応答は極めて簡潔にする（実際の港湾管制のように）
+- 【必須】船舶の初回呼び出し時、まずassignVHFChannelツールを実行する
+- ツール実行結果を待ってから、その結果のチャンネル番号で応答する
+- ツール実行なしでチャンネル番号を発言することは禁止
+- 船舶が「終了」「サインオフ」「通信終了」等を表明したらreleaseVHFChannelツールを使用する
 
-船舶の安全な航行と港内の秩序維持が最重要目標です。
+実際の港湾管制のように、効率的で無駄のない通信を心がけてください。
       `,
       voice: "alloy", // 落ち着いた管制官の声
       tools: [
@@ -159,6 +224,48 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
               };
               
               console.log('⚠️ Function Call失敗:', result);
+              return JSON.stringify(result);
+            }
+          }
+        }),
+        tool({
+          name: 'releaseVHFChannel',
+          description: '船舶からの通信終了通知により、VHFチャンネルを解放する関数。船舶が「終了」「サインオフ」「通信終了」等を表明した際に使用します。',
+          parameters: z.object({
+            vesselName: z.string().describe('船舶名（例：さくら丸、はやぶさ号）'),
+            message: z.string().describe('通信終了メッセージ（例：終了します、サインオフ等）')
+          }),
+          execute: async ({ vesselName, message }) => {
+            console.log(`🔧 チャンネル解放実行: ${vesselName} - ${message}`);
+            
+            // 最新状態をlocalStorageから直接読み込み
+            const currentStatuses = loadChannelStatuses();
+            
+            // 該当船舶のチャンネルを探して解放
+            const assignedChannel = currentStatuses.find(ch => ch.vesselName === vesselName && ch.status === 'assigned');
+            
+            if (assignedChannel) {
+              releaseChannel(assignedChannel.channel);
+              
+              const result = {
+                success: true,
+                vesselName,
+                releasedChannel: assignedChannel.channel,
+                message: `チャンネル${assignedChannel.channel}を解放しました`,
+                timestamp: new Date().toISOString()
+              };
+              
+              console.log('📻 チャンネル解放結果:', result);
+              return JSON.stringify(result);
+            } else {
+              const result = {
+                success: false,
+                error: `${vesselName}に割り当てられたチャンネルが見つかりません`,
+                vesselName,
+                message
+              };
+              
+              console.log('⚠️ チャンネル解放失敗:', result);
               return JSON.stringify(result);
             }
           }
@@ -249,31 +356,57 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // ツール実行要求（Function Call）
-    session.on('agent_tool_start', (context, agent, tool, details) => {
+    session.on('agent_tool_start', (_context, _agent, tool, details) => {
       console.log('🔧 Function Call開始:', tool.name, (details as any)?.toolCall?.args || details);
+      
+      // デバッグ：チャンネル状態表示
+      if (tool.name === 'assignVHFChannel') {
+        console.log('📊 現在のチャンネル状態（ツール開始時）:', channelStatuses);
+        console.log('📊 localStorage状態:', loadChannelStatuses());
+      }
     });
 
     // ツール実行完了（Function Call結果）
-    session.on('agent_tool_end', (context, agent, tool, result, details) => {
+    session.on('agent_tool_end', (_context, _agent, tool, result, _details) => {
       console.log('✅ Function Call完了:', tool.name, result);
       
       // Function Call結果をUIに反映
       if (tool.name === 'assignVHFChannel') {
         try {
           const parsedResult = JSON.parse(result);
+          console.log('📊 assignVHFChannel結果:', parsedResult);
+          
           if (parsedResult.success) {
             setLastMessage(`✅ チャンネル割り当て成功: ${parsedResult.vesselName} → チャンネル${parsedResult.assignedChannel}`);
+            
+            // デバッグ：更新後の状態確認
+            setTimeout(() => {
+              console.log('📊 更新後のチャンネル状態:', loadChannelStatuses());
+            }, 100);
           } else {
             setLastMessage(`❌ チャンネル割り当て失敗: ${parsedResult.error}`);
           }
         } catch (error) {
-          console.log('Function Call結果パース失敗:', result);
+          console.error('❌ Function Call結果パース失敗:', error, 'Raw result:', result);
+        }
+      } else if (tool.name === 'releaseVHFChannel') {
+        try {
+          const parsedResult = JSON.parse(result);
+          console.log('📊 releaseVHFChannel結果:', parsedResult);
+          
+          if (parsedResult.success) {
+            setLastMessage(`✅ チャンネル解放成功: ${parsedResult.vesselName} チャンネル${parsedResult.releasedChannel}解放`);
+          } else {
+            setLastMessage(`❌ チャンネル解放失敗: ${parsedResult.error}`);
+          }
+        } catch (error) {
+          console.error('❌ Function Call結果パース失敗:', error, 'Raw result:', result);
         }
       }
     });
 
     // エージェント開始 - 応答制御付き
-    session.on('agent_start', (context, agent) => {
+    session.on('agent_start', (_context, _agent) => {
       const now = Date.now();
       const timeSinceLastResponse = now - lastResponseTimeRef.current;
       
@@ -285,7 +418,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
       
       setIsResponding(true);
       lastResponseTimeRef.current = now;
-      console.log('🤖 エージェント応答開始:', agent.name);
+      console.log('🤖 エージェント応答開始:', _agent.name);
       
       // 応答タイムアウトを設定（10秒で強制終了）
       if (responseTimeoutRef.current) {
@@ -299,7 +432,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // エージェント終了 - 完了確認付き
-    session.on('agent_end', (context, agent, output) => {
+    session.on('agent_end', (_context, _agent, output) => {
       console.log('🤖 エージェント応答終了:', output);
       
       if (output && output.trim()) {
@@ -322,20 +455,27 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // 音声開始 - 詳細ログ付き
-    session.on('audio_start', (context, agent) => {
+    session.on('audio_start', (_context, _agent) => {
       setAudioPlaying(true);
       console.log('🔊 音声応答開始 - 再生中');
     });
 
     // 音声停止 - 完了確認付き  
-    session.on('audio_stopped', (context, agent) => {
+    session.on('audio_stopped', (_context, _agent) => {
       setAudioPlaying(false);
       console.log('🔊 音声応答終了 - 再生完了');
     });
   };
 
-  // セッション切断
-  const disconnect = async () => {
+  // セッション切断 - メモ化とクリーンアップ強化
+  const disconnect = useCallback(async () => {
+    // 全てのタイムアウトをクリア
+    if (responseTimeoutRef.current) {
+      clearTimeout(responseTimeoutRef.current);
+      responseTimeoutRef.current = null;
+    }
+
+    // セッション切断
     if (sessionRef.current) {
       try {
         sessionRef.current.close();
@@ -348,7 +488,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
         console.error('切断エラー:', error);
       }
     }
-  };
+  }, []);
 
   // マイクストリーム用のref（使用しないが残しておく）
   const streamRef = useRef<MediaStream | null>(null);
@@ -398,20 +538,25 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     }
   };
 
-  // クリーンアップ
+  // クリーンアップ - Memory Leak対策強化
   useEffect(() => {
     return () => {
-      // タイムアウトクリア
+      // 全ての非同期処理とリソースをクリーンアップ
       if (responseTimeoutRef.current) {
         clearTimeout(responseTimeoutRef.current);
+        responseTimeoutRef.current = null;
       }
-      // ストリーム停止
+      
+      // MediaStreamのクリーンアップ
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
+      
+      // セッション切断（非同期処理だが、クリーンアップ時は呼び出す）
       disconnect();
     };
-  }, []);
+  }, [disconnect]);
 
   return (
     <div className={`p-6 bg-gray-900 text-white rounded-lg ${className}`}>
@@ -503,10 +648,19 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
 
       {/* チャンネル状況パネル */}
       <div className="mt-4 p-4 bg-gray-800 rounded">
-        <h3 className="text-lg font-bold mb-3 flex items-center">
-          📻 VHFチャンネル管制状況
-          <span className="ml-2 text-xs text-gray-400">リアルタイム更新</span>
-        </h3>
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-lg font-bold flex items-center">
+            📻 VHFチャンネル管制状況
+            <span className="ml-2 text-xs text-gray-400">リアルタイム更新</span>
+          </h3>
+          <button
+            onClick={resetAllChannels}
+            className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded font-medium"
+            title="全チャンネルをリセット（永続化データもクリア）"
+          >
+            🔄 管制リセット
+          </button>
+        </div>
         
         <div className="space-y-2">
           {channelStatuses.map((channel) => (
@@ -536,6 +690,9 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
                       {channel.assignedAt}割当
                     </div>
                   )}
+                  <div className="text-gray-400 text-xs">
+                    使用回数: {channel.usageCount || 0}回
+                  </div>
                 </div>
               </div>
               
@@ -579,13 +736,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
               はやぶさ号 割り当て
             </button>
             <button
-              onClick={() => {
-                setChannelStatuses([
-                  { channel: 8, status: 'available' },
-                  { channel: 10, status: 'available' },
-                  { channel: 12, status: 'available' }
-                ]);
-              }}
+              onClick={resetAllChannels}
               className="px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white text-xs rounded"
             >
               全チャンネル解放
