@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { RealtimeAgent, RealtimeSession, FunctionTool, tool } from '@openai/agents-realtime';
+import { RealtimeAgent, RealtimeSession, tool } from '@openai/agents-realtime';
 import { z } from 'zod';
 
 /**
@@ -87,28 +87,26 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
 
   // チャンネル割り当て機能（バランス型）- Race Condition対策済み
   const assignChannel = useCallback((vesselName: string): number => {
-    let assignedChannel = 0;
+    // まず現在の状態を同期的に取得
+    const currentStatuses = loadChannelStatuses();
+    const availableChannels = currentStatuses.filter(ch => ch.status === 'available');
     
+    if (availableChannels.length === 0) {
+      console.log('⚠️ 利用可能なチャンネルがありません');
+      return 0;
+    }
+
+    // 最も使用回数の少ないチャンネルを選択（負荷分散）
+    const selectedChannel = availableChannels.reduce((prev, current) => {
+      const prevUsage = prev.usageCount || 0;
+      const currentUsage = current.usageCount || 0;
+      return prevUsage <= currentUsage ? prev : current;
+    });
+
+    const assignedChannelNumber = selectedChannel.channel;
+
+    // 状態を更新（原子的操作）
     setChannelStatuses(prevStatuses => {
-      // 利用可能なチャンネルを取得（原子的操作内で実行）
-      const availableChannels = prevStatuses.filter(ch => ch.status === 'available');
-      
-      if (availableChannels.length === 0) {
-        console.log('⚠️ 利用可能なチャンネルがありません');
-        assignedChannel = 0;
-        return prevStatuses; // 状態変更なし
-      }
-
-      // 最も使用回数の少ないチャンネルを選択（負荷分散）
-      const selectedChannel = availableChannels.reduce((prev, current) => {
-        const prevUsage = prev.usageCount || 0;
-        const currentUsage = current.usageCount || 0;
-        return prevUsage <= currentUsage ? prev : current;
-      });
-
-      assignedChannel = selectedChannel.channel;
-
-      // 状態を更新（原子的操作）
       const updatedStatuses = prevStatuses.map(ch => 
         ch.channel === selectedChannel.channel 
           ? { 
@@ -128,7 +126,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
       return updatedStatuses;
     });
 
-    return assignedChannel;
+    return assignedChannelNumber;
   }, []);
 
   // チャンネル解放機能 - Race Condition対策済み
@@ -358,7 +356,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // ツール実行要求（Function Call）
-    session.on('agent_tool_start', (context, agent, tool, details) => {
+    session.on('agent_tool_start', (_context, _agent, tool, details) => {
       console.log('🔧 Function Call開始:', tool.name, (details as any)?.toolCall?.args || details);
       
       // デバッグ：チャンネル状態表示
@@ -369,7 +367,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // ツール実行完了（Function Call結果）
-    session.on('agent_tool_end', (context, agent, tool, result, details) => {
+    session.on('agent_tool_end', (_context, _agent, tool, result, _details) => {
       console.log('✅ Function Call完了:', tool.name, result);
       
       // Function Call結果をUIに反映
@@ -408,7 +406,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // エージェント開始 - 応答制御付き
-    session.on('agent_start', (context, agent) => {
+    session.on('agent_start', (_context, _agent) => {
       const now = Date.now();
       const timeSinceLastResponse = now - lastResponseTimeRef.current;
       
@@ -420,7 +418,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
       
       setIsResponding(true);
       lastResponseTimeRef.current = now;
-      console.log('🤖 エージェント応答開始:', agent.name);
+      console.log('🤖 エージェント応答開始:', _agent.name);
       
       // 応答タイムアウトを設定（10秒で強制終了）
       if (responseTimeoutRef.current) {
@@ -434,7 +432,7 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // エージェント終了 - 完了確認付き
-    session.on('agent_end', (context, agent, output) => {
+    session.on('agent_end', (_context, _agent, output) => {
       console.log('🤖 エージェント応答終了:', output);
       
       if (output && output.trim()) {
@@ -457,13 +455,13 @@ export default function VoiceRadioOfficial({ className = '' }: VoiceRadioOfficia
     });
 
     // 音声開始 - 詳細ログ付き
-    session.on('audio_start', (context, agent) => {
+    session.on('audio_start', (_context, _agent) => {
       setAudioPlaying(true);
       console.log('🔊 音声応答開始 - 再生中');
     });
 
     // 音声停止 - 完了確認付き  
-    session.on('audio_stopped', (context, agent) => {
+    session.on('audio_stopped', (_context, _agent) => {
       setAudioPlaying(false);
       console.log('🔊 音声応答終了 - 再生完了');
     });

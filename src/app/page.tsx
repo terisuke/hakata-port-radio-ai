@@ -1,5 +1,6 @@
 import VoiceRadio from '@/components/VoiceRadio';
 import VoiceRadioOfficial from '@/components/VoiceRadioOfficial';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 /**
  * 博多ポートラジオAIシステム - メインページ
@@ -26,7 +27,9 @@ export default function Home() {
         <main className="max-w-4xl mx-auto">
           <div className="max-w-3xl mx-auto">
             {/* 音声通信パネル（フル幅） */}
-            <VoiceRadioOfficial className="w-full" />
+            <ErrorBoundary>
+              <VoiceRadioOfficial className="w-full" />
+            </ErrorBoundary>
           </div>
 
           {/* 使用方法説明 */}
